@@ -11,7 +11,6 @@ import psutil
 
 # 全局控制变量
 kill_counts = defaultdict(int)
-psutil_available = False
 running = True
 exit_event = threading.Event()
 
@@ -60,8 +59,6 @@ def enable_registry_editor():
 def kill_malicious_process(process_name: str) -> int:
     """结束进程"""
     count = 0
-    if not psutil_available:
-        return 0
     try:
         import psutil
         for proc in psutil.process_iter(['pid', 'name']):
@@ -112,10 +109,6 @@ def generate_dummy_exe():
 
 def terminate_and_replace(target_process: str):
     """终止并替换进程"""
-    if not psutil_available:
-        print("[!] 需要先安装依赖 (输入 install)")
-        return
-
     try:
         import psutil
         found = False
