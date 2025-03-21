@@ -1,5 +1,6 @@
-import subprocess
-import sys
+import psutil
+import psutil._psutil_windows
+
 import winreg
 import time
 import os
@@ -7,7 +8,6 @@ import threading
 import signal
 from typing import List
 from collections import defaultdict
-import psutil
 
 # 全局控制变量
 kill_counts = defaultdict(int)
