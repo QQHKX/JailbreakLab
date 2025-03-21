@@ -8,6 +8,7 @@ import signal
 from typing import List
 from collections import defaultdict
 import psutil
+
 # 全局控制变量
 kill_counts = defaultdict(int)
 psutil_available = False
@@ -92,10 +93,10 @@ def monitor_system(malicious_process_names: List[str]):
                 if killed > 0:
                     kill_counts[name] += killed
                     total_killed += killed
-            
+          
             if total_killed > 0:
                 print("[+] 已自动防御机房软件自启操作")
-            
+          
             time.sleep(3)
         except Exception as e:
             print(f"[!] 监控异常: {e}")
@@ -170,17 +171,17 @@ def input_handler(target_processes: List[str]):
     while running and not exit_event.is_set():
         try:
             cmd = input("\n命令输入 [help显示菜单] > ").strip().lower()
-            
+          
             if cmd == "help":
                 print("\n=== 帮助菜单 ===")
                 print("status   - 查看防御统计")
                 print("break    - 使用破坏模式")
                 print("exit     - 安全退出程序")
                 print("=================")
-            
+          
             elif cmd == "status":
                 print_kill_stats()
-            
+          
             elif cmd == "break":
                 confirm = input("确认执行不可逆操作？(y/N) > ").lower()
                 if confirm == "y":
@@ -188,11 +189,10 @@ def input_handler(target_processes: List[str]):
                     for process in target_processes:
                         terminate_and_replace(process)
                     print("[!] 破坏操作完成")
-            
-            
+          
             elif cmd == "exit":
                 graceful_exit()
-            
+          
             else:
                 print("未知命令，输入 help 查看菜单")
 
@@ -203,14 +203,14 @@ def input_handler(target_processes: List[str]):
 
 def main():
     signal.signal(signal.SIGINT, signal_handler)
-    
+  
     print(r"""
    ██████╗  ██████╗ ██╗  ██╗██╗  ██╗██╗  ██╗
   ██╔═══██╗██╔═══██╗██║  ██║██║ ██╔╝╚██╗██╔╝
   ██║██╗██║██║██╗██║███████║█████═╝  ╚███╔╝ 
   ╚██████╔╝╚██████╔╝██╔══██║██╔═██╗  ██╔██╗ 
    ╚═██╔═╝  ╚═██╔═╝ ██║  ██║██║ ╚██╗██╔╝╚██╗
-                                              
+                                            
     机房自由助手 v2.2 - 输入 help 获取帮助
         Made by: -qqhkx-
         个人主页: https://qqhkx.com
@@ -228,7 +228,7 @@ def main():
         "ProcHelper64.exe", "MasterHelper.exe",
         "awa.exe"
     ]
-    
+  
     monitor_thread = threading.Thread(target=monitor_system, args=(monitor_list,))
     monitor_thread.start()
 
@@ -244,3 +244,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
