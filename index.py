@@ -5,8 +5,27 @@ import time
 import os
 import threading
 import signal
+import psutil
 from typing import List
 from collections import defaultdict
+
+# 配置参数
+MONITOR_PROCESSES = [
+    "jfglzs.exe", "zmserv.exe", "srvany.exe",
+    "StudentMain.exe", "GATESRV.exe",
+    "ProcHelper64.exe", "MasterHelper.exe",
+    "awa.exe"
+]
+
+TARGET_PROCESSES = [
+    "jfglzs.exe", "zmserv.exe", "srvany.exe",
+    "GATESRV.exe", "ProcHelper64.exe", "MasterHelper.exe"
+]
+
+CONFIG = {
+    "monitor_interval": 3,  # 监控间隔(秒)
+    "psutil_install_source": "https://pypi.tuna.tsinghua.edu.cn/simple"
+}
 
 # 全局控制变量
 kill_counts = defaultdict(int)
@@ -29,31 +48,61 @@ def signal_handler(sig, frame):
     print("\n[!] 接收到退出信号(Ctrl+C)")
     graceful_exit()
 
-def enable_cmd():
-    """启用CMD功能"""
-    try:
-        reg_path = r"Software\Policies\Microsoft\Windows\System"
-        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, reg_path, 0, winreg.KEY_SET_VALUE) as key:
-            try:
-                winreg.DeleteValue(key, "DisableCMD")
-                print("[+] CMD 已解除限制")
-            except FileNotFoundError:
-                print("[*] CMD 未被禁用")
-    except Exception as e:
-        print(f"[!] CMD 解除异常: {e}")
+def enable_feature(feature_type: str):
+    """启用系统功能通用方法"""
+    registry_paths = {
+        'cmd': (r"Software\Policies\Microsoft\Windows\System", "DisableCMD"),
+        'registry': (r"Software\Microsoft\Windows\CurrentVersion\Policies\System", "DisableRegistryTools"),
+        'taskmgr': (r"Software\Microsoft\Windows\CurrentVersion\Policies\System", "DisableTaskMgr")
+    }
 
-def enable_registry_editor():
-    """启用注册表编辑器"""
+    if feature_type not in registry_paths:
+        raise ValueError(f"不支持的功能类型: {feature_type}")
+
+    reg_path, value_name = registry_paths[feature_type]
+    feature_names = {
+        'cmd': "CMD",
+        'registry': "注册表编辑器",
+        'taskmgr': "任务管理器"
+    }
+
     try:
-        reg_path = r"Software\Microsoft\Windows\CurrentVersion\Policies\System"
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, reg_path, 0, winreg.KEY_SET_VALUE) as key:
             try:
-                winreg.DeleteValue(key, "DisableRegistryTools")
-                print("[+] 注册表编辑器已解除限制")
+                winreg.DeleteValue(key, value_name)
+                print(f"[+] {feature_names[feature_type]} 已解除限制")
             except FileNotFoundError:
-                print("[*] 注册表未被禁用")
+                print(f"[*] {feature_names[feature_type]} 未被禁用")
+        return True
     except Exception as e:
-        print(f"[!] 注册表解除异常: {e}")
+        print(f"[!] {feature_names[feature_type]} 解除异常: {e}")
+        return False
+
+def show_file_extensions():
+    """启用文件后缀显示"""
+    try:
+        key_path = r"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_WRITE) as reg_key:
+            winreg.SetValueEx(reg_key, "HideFileExt", 0, winreg.REG_DWORD, 0)
+            print("[+] 文件后缀显示已启用")
+        
+        print("[*] 正在尝试重启资源管理器以应用更改...")
+        try:
+            subprocess.check_call(
+                ["taskkill", "/f", "/im", "explorer.exe"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                creationflags=subprocess.CREATE_NO_WINDOW
+            )
+            print("[+] 资源管理器已重启")
+        except subprocess.CalledProcessError:
+            print("[!] 无法自动重启资源管理器，请手动重启或注销以应用设置")
+        except Exception as e:
+            print(f"[!] 重启资源管理器时出错: {e}")
+        return True
+    except Exception as e:
+        print(f"[!] 启用文件后缀显示失败: {e}")
+        return False
 
 def install_dependencies():
     """安装依赖"""
@@ -68,7 +117,7 @@ def install_dependencies():
             subprocess.check_call([
                 sys.executable, "-m", "pip", "install",
                 "psutil",
-                "-i", "https://pypi.tuna.tsinghua.edu.cn/simple"
+                "-i", CONFIG["psutil_install_source"]
             ], creationflags=subprocess.CREATE_NO_WINDOW)
             print("[+] 依赖安装成功")
             psutil_available = True
@@ -83,7 +132,6 @@ def kill_malicious_process(process_name: str) -> int:
     if not psutil_available:
         return 0
     try:
-        import psutil
         for proc in psutil.process_iter(['pid', 'name']):
             try:
                 if proc.info['name'].lower() == process_name.lower():
@@ -102,13 +150,13 @@ def print_kill_stats():
         print(f"[+] {name}: {count}次")
     print("===================")
 
-def monitor_system(malicious_process_names: List[str]):
+def monitor_system():
     """进程监控"""
     print("[*] 机房软件主动防御已启动")
     while running and not exit_event.is_set():
         try:
             total_killed = 0
-            for name in malicious_process_names:
+            for name in MONITOR_PROCESSES:
                 killed = kill_malicious_process(name)
                 if killed > 0:
                     kill_counts[name] += killed
@@ -117,7 +165,7 @@ def monitor_system(malicious_process_names: List[str]):
             if total_killed > 0:
                 print("[+] 已自动防御机房软件自启操作")
           
-            time.sleep(3)
+            time.sleep(CONFIG["monitor_interval"])
         except Exception as e:
             print(f"[!] 监控异常: {e}")
 
@@ -137,7 +185,6 @@ def terminate_and_replace(target_process: str):
         return
 
     try:
-        import psutil
         found = False
         dummy_data = generate_dummy_exe()
 
@@ -186,7 +233,7 @@ def terminate_and_replace(target_process: str):
     except Exception as e:
         print(f"[!] 操作失败: {e}")
 
-def input_handler(target_processes: List[str]):
+def input_handler():
     """命令输入处理"""
     while running and not exit_event.is_set():
         try:
@@ -207,7 +254,7 @@ def input_handler(target_processes: List[str]):
                 confirm = input("确认执行不可逆操作？(y/N) > ").lower()
                 if confirm == "y":
                     print("[!] 开始破坏操作...")
-                    for process in target_processes:
+                    for process in TARGET_PROCESSES:
                         terminate_and_replace(process)
                     print("[!] 破坏操作完成")
           
@@ -243,30 +290,21 @@ def main():
 
     print("开始初始化操作...")
 
-    enable_cmd()
-    enable_registry_editor()
+    # 启用系统功能
+    enable_feature('cmd')
+    enable_feature('registry')
+    enable_feature('taskmgr')
+    show_file_extensions()
+    
+    # 安装依赖
     install_dependencies()
 
-    monitor_list = [
-        "jfglzs.exe", "zmserv.exe", "srvany.exe",
-        "StudentMain.exe", "GATESRV.exe",
-        "ProcHelper64.exe", "MasterHelper.exe",
-        "awa.exe"
-    ]
-  
-    monitor_thread = threading.Thread(target=monitor_system, args=(monitor_list,))
+    # 启动监控线程
+    monitor_thread = threading.Thread(target=monitor_system)
     monitor_thread.start()
 
-    target_list = [
-        "jfglzs.exe", "zmserv.exe", "srvany.exe",
-        "GATESRV.exe", "ProcHelper64.exe", "MasterHelper.exe"
-    ]
-
-    try:
-        input_handler(target_list)
-    finally:
-        graceful_exit()
+    # 处理用户输入
+    input_handler()
 
 if __name__ == "__main__":
     main()
-
