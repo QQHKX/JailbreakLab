@@ -1,0 +1,15 @@
+# Git忽略配置文件
+
+# 忽略发布说明文档
+发布说明.md
+
+# 忽略Python编译文件
+__pycache__/
+*.py[cod]
+*$py.class
+
+# 忽略构建目录
+build/
+
+# 忽略规范文件
+*.spec
